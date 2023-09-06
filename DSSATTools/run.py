@@ -261,7 +261,7 @@ class DSSAT():
         assert excinfo.returncode == 0, 'DSSAT execution Failed, check '\
             + f'{os.path.join(self._RUN_PATH, "ERROR.OUT")} file for a'\
             + ' detailed report'
-
+        
         OUTPUT_FILES = [i for i in os.listdir(self._RUN_PATH) if i[-3:] == 'OUT']
         self.OUTPUT_LIST = [
             var for var in OUTPUTS
@@ -270,7 +270,8 @@ class DSSAT():
         # Check for man.simulation_controls["WATER"]
         if management.simulation_controls["WATER"] == "N":
             self.OUTPUT_LIST = list(filter(lambda x: x != "SoilWat", self.OUTPUT_LIST))
-        
+
+        NYERS = management.simulation_controls['NYERS']
         for file in self.OUTPUT_LIST:
             assert f'{file}.OUT' in OUTPUT_FILES, \
                 f'{file}.OUT does not exist in {self._RUN_PATH}'
@@ -294,6 +295,24 @@ class DSSAT():
                     os.path.join(self._RUN_PATH, f'{file}.OUT'),
                     skiprows=0, sep=' ', skipinitialspace=True
                 )
+
+            if NYERS > 1:
+                run_start_idx = df.loc[df.isna().all(axis=1)].index
+                run_start_idx = [0] + list(run_start_idx) + [df.index.max()]
+                df_all = df
+                df = pd.DataFrame()
+                idx_start = 0
+                for n, idx in enumerate(run_start_idx[1:]):
+                    tmp_df = df_all.loc[run_start_idx[n]: idx]
+                    tmp_df = tmp_df.dropna(how='all').reset_index(drop=True)
+                    if n < NYERS-1:
+                        idx = tmp_df['@YEAR'].str.match("^\*").idxmax()-1
+                    if n > 0:
+                        idx_start = tmp_df['@YEAR'].str.match("^@").idxmax()+1
+                    tmp_df = tmp_df.loc[idx_start:idx]
+                    tmp_df["RUN"] = n + 1
+                    df = pd.concat([df, tmp_df], ignore_index=True)
+                    
             if all(('@YEAR' in df.columns, 'DOY' in df.columns)):
                 df['DOY'] = df.DOY.astype(int).map(lambda x: f'{x:03d}')
                 df['@YEAR'] = df['@YEAR'].astype(str)
